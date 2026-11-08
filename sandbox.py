@@ -52,9 +52,12 @@ def run_code(code: str, data_path: str, timeout: int = 30) -> dict:
         cmd = [sys.executable, "-I", "script.py"]
         tmp = os.path.join(work, "tmp")
         os.makedirs(tmp)
+        # Reusable matplotlib font cache (fonts only, no secrets) so runs don't rebuild it each time.
+        mpl_cache = os.path.join(tempfile.gettempdir(), "veriagent_mplcache")
+        os.makedirs(mpl_cache, exist_ok=True)
         # EMPTY environment: no API keys or other secrets leak into the sandbox.
         env = {"PATH": os.path.dirname(sys.executable), "MPLBACKEND": "Agg",
-               "MPLCONFIGDIR": tmp, "TEMP": tmp, "TMP": tmp, "HOME": tmp}
+               "MPLCONFIGDIR": mpl_cache, "TEMP": tmp, "TMP": tmp, "HOME": tmp}
         if os.name == "nt":
             env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", r"C:\Windows")  # needed for Python to start
 

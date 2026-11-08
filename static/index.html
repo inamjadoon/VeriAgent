@@ -54,6 +54,10 @@ $("run").onclick = async () => {
   $("busy").textContent = ""; $("run").disabled = false;
 };
 
+// Shareable links: /?q=<question> fills the box and runs it on the sample data.
+const preset = new URLSearchParams(location.search).get("q");
+if (preset) { $("q").value = preset; $("run").click(); }
+
 function render(d) {
   const weak = d.sandbox_mode.startsWith("subprocess");
   const imgs = d.output_files.filter(f => f.endsWith(".png"))
@@ -71,7 +75,7 @@ function render(d) {
     <ol>${d.steps.map(s => `<li><b>${esc(s.step)}</b> (${esc(s.time)}): ${esc(s.detail)}</li>`).join("")}</ol>
     <h3>Code</h3><pre>${esc(d.code)}</pre>
     <h3>Output</h3><pre>${esc(d.stdout) || "(no output)"}</pre>
-    ${d.stderr ? `<h3>Errors</h3><pre>${esc(d.stderr)}</pre>` : ""}
+    ${d.stderr ? `<h3>${d.status === "success" ? "Warnings" : "Errors"}</h3><pre>${esc(d.stderr)}</pre>` : ""}
     ${imgs ? `<h3>Chart</h3>${imgs}` : ""}
     <h3>Proof (SHA-256)</h3><div class="card">${hashes.join("")}
       <p><a href="/api/runs/${d.id}" target="_blank">View full provenance record (JSON)</a></p></div>`;

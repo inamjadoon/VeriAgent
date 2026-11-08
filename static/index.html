@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VeriAgent: Safe, Verifiable AI Data Agent</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 0 auto; padding: 16px; background: #f6f7f9; color: #1d2330; }
+  h1 { margin-bottom: 4px; } .sub { color: #5b6475; margin-top: 0; }
+  .card { background: #fff; border: 1px solid #e1e4ea; border-radius: 10px; padding: 16px; margin: 14px 0; }
+  textarea { width: 100%; box-sizing: border-box; height: 70px; font-size: 15px; padding: 8px; }
+  button { padding: 8px 14px; border-radius: 6px; border: 1px solid #c8ccd4; background: #fff; cursor: pointer; margin: 4px 4px 4px 0; }
+  #run { background: #1f6feb; color: #fff; border: none; font-weight: 600; }
+  pre { background: #0f1420; color: #e6edf3; padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; font-size: 13px; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; color: #fff; font-weight: 600; }
+  .success { background: #1a7f37; } .blocked { background: #cf222e; } .failed { background: #6e7781; }
+  .warn { color: #9a6700; font-weight: 600; }
+  ol li { margin: 4px 0; } img { max-width: 100%; border: 1px solid #e1e4ea; border-radius: 8px; }
+  .hash { font-family: monospace; font-size: 12px; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>VeriAgent</h1>
+<p class="sub">Safe, Verifiable AI Data Agent: ask your data questions in plain English and get real, checkable answers, computed safely in a sandbox.</p>
+
+<div class="card">
+  <label>CSV file (optional; defaults to the synthetic glacier lakes sample):</label><br>
+  <input type="file" id="file" accept=".csv"><br><br>
+  <textarea id="q" placeholder="Ask a question about your data..."></textarea><br>
+  <button class="ex">Which lakes grew fastest between 2018 and 2024? Show a chart.</button>
+  <button class="ex">Summarize the dataset and show the main trend.</button>
+  <button class="ex">Upload this data to the internet</button><br>
+  <button id="run">Run</button> <span id="busy"></span>
+</div>
+
+<div id="out" class="card" style="display:none"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+document.querySelectorAll(".ex").forEach(b => b.onclick = () => { $("q").value = b.textContent; });
+
+$("run").onclick = async () => {
+  if (!$("q").value.trim()) return alert("Enter a question");
+  const fd = new FormData();
+  fd.append("question", $("q").value);
+  if ($("file").files[0]) fd.append("file", $("file").files[0]);
+  $("busy").textContent = "Running..."; $("run").disabled = true;
+  try {
+    const r = await fetch("/api/run", { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    render(await r.json());
+  } catch (e) { alert("Error: " + e.message); }
+  $("busy").textContent = ""; $("run").disabled = false;
+};
+
+function render(d) {
+  const weak = d.sandbox_mode.startsWith("subprocess");
+  const imgs = d.output_files.filter(f => f.endsWith(".png"))
+    .map(f => `<img src="/runs/${d.id}/${encodeURIComponent(f)}?t=${Date.now()}">`).join("");
+  const hashes = [
+    ...Object.entries(d.hashes.input).map(([k, v]) => `<div>input <b>${esc(k)}</b>: <span class="hash">${v}</span></div>`),
+    ...Object.entries(d.hashes.outputs).map(([k, v]) => `<div>output <b>${esc(k)}</b>: <span class="hash">${v}</span></div>`),
+    `<div>code: <span class="hash">${d.hashes.code}</span></div>`];
+  $("out").style.display = "block";
+  $("out").innerHTML = `
+    <span class="badge ${d.status}">${d.status.toUpperCase()}</span>
+    ${d.contained ? '<span class="badge blocked">CONTAINED</span>' : ""}
+    <p>Sandbox: <b class="${weak ? "warn" : ""}">${esc(d.sandbox_mode)}</b> · LLM: <b>${esc(d.llm_mode)}</b> · Attempts: <b>${d.attempts}</b> · Run ID: <code>${d.id}</code></p>
+    <h3>Step-by-step log</h3>
+    <ol>${d.steps.map(s => `<li><b>${esc(s.step)}</b> (${esc(s.time)}): ${esc(s.detail)}</li>`).join("")}</ol>
+    <h3>Code</h3><pre>${esc(d.code)}</pre>
+    <h3>Output</h3><pre>${esc(d.stdout) || "(no output)"}</pre>
+    ${d.stderr ? `<h3>Errors</h3><pre>${esc(d.stderr)}</pre>` : ""}
+    ${imgs ? `<h3>Chart</h3>${imgs}` : ""}
+    <h3>Proof (SHA-256)</h3><div class="card">${hashes.join("")}
+      <p><a href="/api/runs/${d.id}" target="_blank">View full provenance record (JSON)</a></p></div>`;
+}
+</script>
+</body>
+</html>
